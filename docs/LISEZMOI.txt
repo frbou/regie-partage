@@ -1,0 +1,32 @@
+RÉGIE PARTAGE
+=============
+
+Partager simplement les documents de chaque projet (plans, fiches techniques,
+conduites…) avec les régisseurs, via le SharePoint de la salle.
+
+LANCER
+  Double-cliquer sur RegiePartage.exe. L'application s'ouvre dans le
+  navigateur. Laisser la petite fenêtre noire ouverte : la fermer quitte
+  l'application. Premier lancement : voir GUIDE-ADMINISTRATEUR.txt.
+
+AU QUOTIDIEN
+  1. Régisseurs : ajouter chaque personne une fois (nom, e-mail, métier).
+  2. Projets > Nouveau projet : un dossier est créé sur SharePoint.
+  3. Dans le projet :
+       - glisser les documents dans le cadre « Documents » ;
+       - choisir un régisseur, le droit (lecture seule, ou lecture + dépôt
+         s'il doit vous renvoyer des fichiers), puis « Envoyer l'accès ».
+     Le régisseur reçoit un e-mail de Microsoft avec le lien. À l'ouverture,
+     un code lui est envoyé par e-mail : il n'a aucun compte à créer.
+  4. Les documents ajoutés ensuite sont visibles immédiatement : inutile de
+     renvoyer l'accès.
+  5. Fin de projet : bouton « ••• » à côté d'un régisseur > Retirer l'accès,
+     ou Modifier > « Projet archivé » pour le ranger.
+
+BON À SAVOIR
+  - Les données sont sur SharePoint : plusieurs postes de la salle peuvent
+    utiliser Régie Partage en même temps.
+  - Supprimer un projet retire tous les accès mais garde le dossier sur
+    SharePoint. Un document supprimé va dans la corbeille SharePoint.
+  - Un régisseur qui ne trouve pas l'e-mail : « ••• » > Renvoyer l'e-mail
+    d'accès (et vérifier ses indésirables).

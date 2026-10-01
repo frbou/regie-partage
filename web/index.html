@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Régie Partage</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23b4462d'/%3E%3Cpath d='M9 10h9l5 5v9H9z' fill='white'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="barre">
+  <a class="marque" href="#/projets"><span class="logo"></span>Régie Partage</a>
+  <nav>
+    <a href="#/projets" data-nav="projets">Projets</a>
+    <a href="#/regisseurs" data-nav="regisseurs">Régisseurs</a>
+    <a href="#/reglages" data-nav="reglages">Réglages</a>
+  </nav>
+  <span class="compte" id="compte"></span>
+</header>
+<main id="vue"><p class="attente">Chargement…</p></main>
+<div id="toasts" aria-live="polite"></div>
+<dialog id="dialogue"></dialog>
+<script src="app.js"></script>
+</body>
+</html>

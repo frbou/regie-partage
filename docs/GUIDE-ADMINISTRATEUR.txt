@@ -1,0 +1,97 @@
+RÉGIE PARTAGE — GUIDE DE L'ADMINISTRATEUR MICROSOFT 365
+=========================================================
+
+À faire une seule fois par la personne qui administre le Microsoft 365 de la
+salle (environ 20 minutes). Il faut des droits d'administrateur général, ou
+au minimum d'administrateur d'applications + d'administrateur SharePoint.
+
+Résultat attendu : deux identifiants (tenant et client) et l'adresse d'un
+site SharePoint, à saisir dans Régie Partage > Réglages.
+
+
+1. CRÉER LE SITE SHAREPOINT « RÉGIE »
+-------------------------------------
+Les documents des projets y seront rangés. Ils appartiennent ainsi à la salle
+et non à un salarié : rien n'est perdu si quelqu'un part.
+
+  a. SharePoint > Créer un site > Site d'équipe (ou Site de communication).
+     Nom : Régie   →  adresse du type https://NOMSALLE.sharepoint.com/sites/Regie
+  b. Ajouter comme membres les personnes de la salle qui utiliseront
+     Régie Partage (elles doivent pouvoir modifier le site).
+  c. Noter l'adresse du site.
+
+
+2. AUTORISER LE PARTAGE AVEC DES PERSONNES EXTÉRIEURES
+------------------------------------------------------
+Les régisseurs n'ont pas de compte chez vous : ils reçoivent un lien, puis un
+code à usage unique par e-mail à l'ouverture. Aucun compte à créer.
+
+  a. Centre d'administration SharePoint > Stratégies > Partage :
+     niveau de l'organisation au moins « Invités nouveaux et existants ».
+  b. Centre d'administration SharePoint > Sites actifs > Regie > Paramètres >
+     Partage externe : « Invités nouveaux et existants ».
+  c. Vérifier que le code secret à usage unique par e-mail est activé
+     (Microsoft Entra > Identités externes > Toutes les identités >
+     Code secret à usage unique par e-mail : activé ; c'est le réglage par
+     défaut).
+
+Remarque : « Personnes avec le lien » (lien anonyme) n'est PAS utilisé.
+Chaque accès est nominatif et peut être retiré individuellement.
+
+
+3. DÉCLARER L'APPLICATION DANS MICROSOFT ENTRA
+----------------------------------------------
+  a. https://entra.microsoft.com > Applications > Inscriptions d'applications
+     > Nouvelle inscription.
+       - Nom : Régie Partage
+       - Types de comptes : comptes de cet annuaire organisationnel uniquement
+       - URI de redirection : plateforme « Client public/natif (mobile et
+         bureau) », valeur EXACTE :
+             http://localhost:47820/auth/retour
+     > S'inscrire.
+
+  b. Page « Vue d'ensemble » de l'application : noter
+       - ID d'application (client)
+       - ID de l'annuaire (locataire)   (= tenant)
+
+  c. Autorisations d'API > Ajouter une autorisation > Microsoft Graph >
+     Autorisations déléguées, cocher :
+       - User.Read
+       - Files.ReadWrite.All
+       - Sites.ReadWrite.All
+       - offline_access
+     puis cliquer « Accorder un consentement d'administrateur pour … ».
+
+  Aucun secret ni certificat n'est nécessaire. L'application agit toujours
+  au nom de la personne connectée, avec ses propres droits : elle ne voit
+  que ce que cette personne peut voir.
+
+
+4. PREMIER LANCEMENT SUR UN POSTE
+---------------------------------
+  a. Copier le dossier RegiePartage sur le poste (par ex. dans Documents)
+     et lancer RegiePartage.exe.
+     Windows peut afficher « Windows a protégé votre ordinateur » (application
+     non signée) : « Informations complémentaires » > « Exécuter quand même ».
+  b. Le navigateur s'ouvre sur Réglages. Saisir :
+       - ID de l'annuaire (tenant) et ID de l'application (client)
+       - Adresse du site SharePoint (étape 1)
+       - Signature des invitations (ex. « La régie technique — Théâtre X »)
+  c. Enregistrer, puis « Se connecter à Microsoft 365 » avec le compte de la
+     personne qui utilise le poste.
+
+Les réglages et la connexion sont propres à chaque poste et à chaque session
+Windows (stockés chiffrés dans %AppData%\RegiePartage). Les projets et
+régisseurs sont communs : ils sont dans le fichier
+« Régie Partage/_regie-partage.json » du site, à ne pas supprimer.
+
+
+EN CAS DE PROBLÈME
+------------------
+« Partage refusé … partage externe désactivé »  → revoir l'étape 2.
+« Connexion refusée … AADSTS50011 »              → l'URI de redirection ne
+   correspond pas exactement (étape 3a).
+« Connexion refusée … AADSTS65001 / consent »    → consentement administrateur
+   non accordé (étape 3c).
+« Site SharePoint introuvable »                  → vérifier l'adresse du site
+   et que la personne connectée en est membre.

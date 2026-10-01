@@ -1,0 +1,29 @@
+# À chaque tag vX.Y.Z poussé : compile l'exécutable Windows et publie la
+# Release avec RegiePartage-X.Y.Z-windows.zip.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Compilation
+        run: VERSION="${GITHUB_REF_NAME#v}" ./build.sh
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" "dist/RegiePartage-$V-windows.zip" \
+            --title "Régie Partage $V" \
+            --notes "Mise à jour : quitter Régie Partage, dézipper et remplacer RegiePartage.exe. Réglages et connexion sont conservés."
