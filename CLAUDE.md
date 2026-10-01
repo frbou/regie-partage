@@ -19,3 +19,4 @@ Application développée par Frédéric Bourset pour une salle de spectacle : pa
 - v1.0.1 : compte Microsoft personnel (tenant `consumers`, OneDrive perso, sans Sites.*) pour essais ; version Mac.
 - v1.1.0 : Nextcloud (connexion par le navigateur, partage personnel par e-mail ou lien, mot de passe à transmettre par SMS ou copie).
 - v1.1.1 : Nextcloud — option « J'envoie les liens moi-même » (lien type 3 + messagerie), `sendMail=true` explicite, bouton de secours quand l'e-mail Nextcloud n'arrive pas (Nextcloud peut ne rien envoyer sans erreur).
+- v1.1.2 : correctif — suppression d'un régisseur impossible (confirmation annulée par la fermeture de la fenêtre précédente ; bouton rouge sur rouge).

@@ -75,20 +75,26 @@ const compteService = () => estNC() ? "Nextcloud" : "Microsoft 365";
 const extension = (nom) => (nom.includes(".") ? nom.split(".").pop().slice(0, 4).toUpperCase() : "—");
 
 function ouvrirDialogue(html, initialiser) {
+  dialogue.oncancel = null;
   dialogue.innerHTML = html;
-  dialogue.showModal();
+  if (!dialogue.open) dialogue.showModal();
   dialogue.querySelectorAll("[data-fermer]").forEach((b) => (b.onclick = () => dialogue.close()));
   initialiser?.(dialogue);
   dialogue.querySelector("input, textarea, select")?.focus();
 }
 
+// confirmer : réponse par les boutons ou Échap. On n'écoute pas l'événement
+// « close », qui peut venir d'une fenêtre précédente fermée juste avant
+// (il arrive après coup et passait la confirmation pour un « Annuler »).
 function confirmer(titre, texte, libelle = "Confirmer") {
   return new Promise((resoudre) => {
     ouvrirDialogue(`<h2>${esc(titre)}</h2><p>${esc(texte)}</p>
-      <div class="pied"><button data-fermer>Annuler</button><button class="principal danger" id="ok">${esc(libelle)}</button></div>`,
+      <div class="pied"><button id="non">Annuler</button><button class="principal danger" id="ok">${esc(libelle)}</button></div>`,
       (d) => {
-        d.querySelector("#ok").onclick = () => { d.close(); resoudre(true); };
-        d.addEventListener("close", () => resoudre(false), { once: true });
+        const repondre = (oui) => { d.oncancel = null; d.close(); resoudre(oui); };
+        d.querySelector("#ok").onclick = () => repondre(true);
+        d.querySelector("#non").onclick = () => repondre(false);
+        d.oncancel = () => resoudre(false);
       });
   });
 }

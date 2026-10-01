@@ -75,6 +75,7 @@ button, .bouton {
 button:hover, .bouton:hover { border-color: var(--doux); }
 button.principal, .bouton.principal { background: var(--accent); border-color: var(--accent); color: var(--accent-texte); font-weight: 600; }
 button.danger { color: var(--alerte); }
+button.principal.danger { background: var(--alerte); border-color: var(--alerte); color: #fff; }
 button.lien { border: none; background: none; padding: .2rem .35rem; color: var(--doux); }
 button.lien:hover { color: var(--accent); }
 button:disabled { opacity: .5; cursor: wait; }
