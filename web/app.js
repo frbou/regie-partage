@@ -449,6 +449,7 @@ function pageReglages() {
         <h2>Microsoft 365 de la salle</h2>
         <p class="doux petit">Valeurs fournies par l'administrateur Microsoft 365 (voir le guide administrateur livré avec l'application).</p>
         <label for="tenant">ID de l'annuaire (tenant)</label><input id="tenant" required value="${esc(c.tenantId)}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+        <p class="doux petit">Compte Microsoft personnel (OneDrive perso, pour essayer) : saisir <code>consumers</code> et laisser le site vide.</p>
         <label for="client">ID de l'application (client)</label><input id="client" required value="${esc(c.clientId)}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
         <label for="site">Adresse du site SharePoint</label><input id="site" value="${esc(c.siteUrl)}" placeholder="https://masalle.sharepoint.com/sites/Regie">
         <p class="doux petit">Vide = OneDrive de la personne connectée (déconseillé : les dossiers disparaissent si elle quitte la salle).</p>

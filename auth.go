@@ -21,7 +21,18 @@ import (
 // application cliente publique (pas de secret). Le jeton d'actualisation est
 // conservé sur le poste, chiffré par Windows (DPAPI) pour l'utilisateur courant.
 
-const scopes = "offline_access User.Read Files.ReadWrite.All Sites.ReadWrite.All"
+// Tenant « consumers » = compte Microsoft personnel (OneDrive perso) : pas de
+// SharePoint, l'autorisation Sites.* y est refusée.
+const tenantPerso = "consumers"
+
+func (c Config) Perso() bool { return strings.EqualFold(c.TenantID, tenantPerso) }
+
+func (c Config) scopes() string {
+	if c.Perso() {
+		return "offline_access User.Read Files.ReadWrite.All"
+	}
+	return "offline_access User.Read Files.ReadWrite.All Sites.ReadWrite.All"
+}
 
 var ErrNonConnecte = errors.New("non connecté à Microsoft 365")
 
@@ -92,6 +103,9 @@ func (a *Auth) EnregistrerConfig(c Config) error {
 	c.SiteURL = strings.TrimRight(strings.TrimSpace(c.SiteURL), "/")
 	c.DossierRacine = strings.Trim(strings.TrimSpace(c.DossierRacine), "/")
 	c.NomSalle = strings.TrimSpace(c.NomSalle)
+	if strings.EqualFold(c.TenantID, tenantPerso) {
+		c.TenantID, c.SiteURL = tenantPerso, ""
+	}
 	if c.DossierRacine == "" {
 		c.DossierRacine = "Régie Partage"
 	}
@@ -142,7 +156,7 @@ func (a *Auth) URLConnexion() (string, error) {
 		"response_type":         {"code"},
 		"redirect_uri":          {a.redirect},
 		"response_mode":         {"query"},
-		"scope":                 {scopes},
+		"scope":                 {a.cfg.scopes()},
 		"state":                 {state},
 		"code_challenge":        {base64.RawURLEncoding.EncodeToString(h[:])},
 		"code_challenge_method": {"S256"},
@@ -225,7 +239,7 @@ func (a *Auth) demanderJeton(ctx context.Context, v url.Values) error {
 	cfg := a.cfg
 	a.mu.Unlock()
 	v.Set("client_id", cfg.ClientID)
-	v.Set("scope", scopes)
+	v.Set("scope", cfg.scopes())
 	req, _ := http.NewRequestWithContext(ctx, "POST", a.point("token"), strings.NewReader(v.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := a.client.Do(req)

@@ -95,3 +95,27 @@ EN CAS DE PROBLÈME
    non accordé (étape 3c).
 « Site SharePoint introuvable »                  → vérifier l'adresse du site
    et que la personne connectée en est membre.
+
+
+ESSAI AVEC UN COMPTE MICROSOFT PERSONNEL (ONEDRIVE PERSO)
+---------------------------------------------------------
+Pour tester avant la mise en place chez la salle. Le partage d'un OneDrive
+personnel se comporte un peu différemment de SharePoint (e-mails, codes),
+mais le principe est le même.
+
+  a. Se connecter à https://entra.microsoft.com avec son compte Microsoft.
+     S'il n'y a pas d'annuaire disponible, en obtenir un en créant un compte
+     Azure gratuit (https://azure.microsoft.com/free ; carte demandée pour
+     vérification, rien n'est facturé pour cet usage).
+  b. Nouvelle inscription d'application comme à l'étape 3, MAIS :
+       - Types de comptes : « Comptes dans un annuaire organisationnel et
+         comptes Microsoft personnels »
+       - même URI de redirection : http://localhost:47820/auth/retour
+       - autorisations déléguées : User.Read, Files.ReadWrite.All,
+         offline_access (pas Sites.ReadWrite.All)
+  c. Dans Régie Partage > Réglages :
+       - ID de l'annuaire : consumers
+       - ID de l'application : celui de l'inscription
+       - Adresse du site SharePoint : vide
+  d. Se connecter avec le compte personnel. Les projets sont créés dans le
+     OneDrive, dossier « Régie Partage ».

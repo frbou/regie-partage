@@ -36,10 +36,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "v$V" >/dev/null 2>&1; then
-            gh release upload "v$V" "dist/RegiePartage-$V-windows.zip" --clobber
+            gh release upload "v$V" dist/RegiePartage-$V-*.zip --clobber
           else
-            gh release create "v$V" "dist/RegiePartage-$V-windows.zip" \
+            gh release create "v$V" dist/RegiePartage-$V-*.zip \
               --target "$GITHUB_SHA" \
               --title "Régie Partage $V" \
-              --notes "Mise à jour : quitter Régie Partage, dézipper et remplacer RegiePartage.exe. Réglages et connexion sont conservés."
+              --notes "Mise à jour : quitter Régie Partage, dézipper et remplacer les fichiers (Windows : RegiePartage.exe ; Mac : zip -mac, pour essais). Réglages et connexion sont conservés."
           fi
