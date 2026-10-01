@@ -427,6 +427,20 @@ func TestNextcloudPartages(t *testing.T) {
 		t.Errorf("retirer un partage déjà supprimé ne doit pas échouer : %v", err)
 	}
 
+	if pf.Get("sendMail") != "true" {
+		t.Errorf("l'envoi de l'e-mail doit être demandé explicitement : %v", pf)
+	}
+
+	// Envoi manuel choisi dans les réglages : lien personnel, sans e-mail Nextcloud.
+	n.auth.cfg.NCEnvoiManuel = true
+	nbMails := len(f.mailsEnv)
+	p, err = n.Partager(ctx, dos.ID, Destinataire{Email: "paul@exemple.fr", Nom: "Paul"}, false, "")
+	if err != nil || !p.SansMail || f.partages[p.ID].Get("shareType") != "3" || len(f.mailsEnv) != nbMails {
+		t.Fatalf("envoi manuel : %+v, %v", p, err)
+	}
+	_ = n.Retirer(ctx, dos.ID, p.versAcces("paul", false, ""), false, Destinataire{})
+	n.auth.cfg.NCEnvoiManuel = false
+
 	// Sans « Share by mail » : lien personnel nommé, à envoyer soi-même.
 	f.sansMail = true
 	p, err = n.Partager(ctx, dos.ID, lea, true, "")

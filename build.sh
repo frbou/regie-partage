@@ -3,7 +3,7 @@
 #   VERSION=1.0.0 ./build.sh   →  dist/RegiePartage-1.0.0-windows.zip
 set -e
 cd "$(dirname "$0")"
-VERSION="${VERSION:-1.1.0}"
+VERSION="${VERSION:-1.1.1}"
 
 go vet ./...
 go test ./...

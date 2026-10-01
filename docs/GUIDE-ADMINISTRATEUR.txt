@@ -139,6 +139,12 @@ protégé par un mot de passe généré par Régie Partage.
     serveur, il envoie aussi le mot de passe dans un second e-mail.
   - Sinon, Régie Partage affiche le lien : bouton « Envoyer le lien par
     e-mail » (ouvre votre messagerie) ou « Copier ».
+  - LE RÉGISSEUR NE REÇOIT PAS L'E-MAIL ? Vérifier ses indésirables, puis,
+    côté serveur, que Nextcloud sait envoyer des e-mails (Paramètres
+    d'administration > Paramètres de base > Serveur e-mail > « Envoyer un
+    e-mail »). Le plus simple : Réglages > cocher « J'envoie les liens
+    moi-même » ; le lien part alors de votre propre messagerie. Pour un
+    accès déjà créé : « ••• » > « Envoyer le lien moi-même ».
   - Le mot de passe se communique séparément : bouton « Mot de passe par
     SMS » si le téléphone du régisseur est renseigné, ou « Copier ».
   - Retirer l'accès supprime ce seul partage : les autres régisseurs gardent

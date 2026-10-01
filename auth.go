@@ -42,8 +42,11 @@ const (
 )
 
 type Config struct {
-	Fournisseur   string `json:"fournisseur"`  // microsoft (défaut) ou nextcloud
-	NextcloudURL  string `json:"nextcloudUrl"` // ex. https://cloud.exemple.fr
+	Fournisseur  string `json:"fournisseur"`  // microsoft (défaut) ou nextcloud
+	NextcloudURL string `json:"nextcloudUrl"` // ex. https://cloud.exemple.fr
+	// NCEnvoiManuel : liens envoyés depuis sa propre messagerie plutôt que
+	// par Nextcloud (serveur sans e-mail, ou e-mails classés indésirables).
+	NCEnvoiManuel bool   `json:"ncEnvoiManuel"`
 	TenantID      string `json:"tenantId"`
 	ClientID      string `json:"clientId"`
 	SiteURL       string `json:"siteUrl"`       // vide = OneDrive de la personne connectée

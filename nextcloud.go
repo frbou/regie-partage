@@ -640,24 +640,31 @@ func (n *Nextcloud) Partager(ctx context.Context, dossierID string, dest Destina
 		"password":    {mdp},
 		"note":        {message},
 	}
-	// Partage par e-mail : Nextcloud envoie lui-même le lien.
-	f := cloneValues(form)
-	f.Set("shareType", strconv.Itoa(ncPartageEmail))
-	f.Set("shareWith", dest.Email)
 	var p ncPartage
-	errMail := n.ocs(ctx, "POST", "/ocs/v2.php/apps/files_sharing/api/v1/shares", f, &p)
-	if errMail == nil {
-		return n.versPartage(p, mdp, false), nil
+	var errMail error
+	if !n.auth.Config().NCEnvoiManuel {
+		// Partage par e-mail : Nextcloud envoie lui-même le lien.
+		f := cloneValues(form)
+		f.Set("shareType", strconv.Itoa(ncPartageEmail))
+		f.Set("shareWith", dest.Email)
+		f.Set("sendMail", "true")
+		errMail = n.ocs(ctx, "POST", "/ocs/v2.php/apps/files_sharing/api/v1/shares", f, &p)
+		if errMail == nil {
+			return n.versPartage(p, mdp, false), nil
+		}
+		if errors.Is(errMail, ErrNonConnecte) {
+			return nil, errMail
+		}
 	}
-	if errors.Is(errMail, ErrNonConnecte) {
-		return nil, errMail
-	}
-	// Repli : lien personnel nommé, à transmettre soi-même.
-	f = cloneValues(form)
+	// Lien personnel nommé, à transmettre depuis sa messagerie.
+	f := cloneValues(form)
 	f.Set("shareType", strconv.Itoa(ncPartageLien))
 	f.Set("label", dest.Nom)
 	if err := n.ocs(ctx, "POST", "/ocs/v2.php/apps/files_sharing/api/v1/shares", f, &p); err != nil {
-		return nil, fmt.Errorf("%w (partage par e-mail : %v)", err, errMail)
+		if errMail != nil {
+			return nil, fmt.Errorf("%w (partage par e-mail : %v)", err, errMail)
+		}
+		return nil, err
 	}
 	return n.versPartage(p, mdp, true), nil
 }

@@ -341,9 +341,10 @@ function apresEnvoi(p, regId, message) {
   ouvrirDialogue(`<h2>${a.sansMail ? "Lien à envoyer" : "Accès envoyé"}</h2>
     <p>${a.sansMail
       ? `Votre Nextcloud n'envoie pas d'e-mail de partage : transmettez ce lien personnel à <strong>${esc(nomComplet(r))}</strong>.`
-      : `Nextcloud a envoyé le lien à <strong>${esc(nomComplet(r))}</strong> (${esc(r.email)}).`}</p>
+      : `Nextcloud envoie le lien par e-mail à <strong>${esc(nomComplet(r))}</strong> (${esc(r.email)}).`}</p>
     ${infosPartage(a)}
     <p class="doux petit">Le mot de passe se communique séparément (SMS, téléphone)${a.sansMail ? "" : ". Selon le réglage du serveur, Nextcloud l'envoie aussi dans un second e-mail"}.</p>
+    ${a.sansMail ? "" : `<p class="doux petit">Rien reçu (pensez aux indésirables) ? Envoyez le lien vous-même : <a href="${esc(lienMail(p, r, a, message))}">ouvrir ma messagerie</a>.</p>`}
     <div class="pied">
       ${a.sansMail ? `<a class="bouton principal" href="${esc(lienMail(p, r, a, message))}">Envoyer le lien par e-mail</a>` : ""}
       ${r.telephone && a.motDePasse ? `<a class="bouton" href="${esc(lienSMS(r, a))}">Mot de passe par SMS</a>` : ""}
@@ -385,7 +386,8 @@ function optionsAcces(p, regId) {
     <p class="doux">${esc(r.email)}<br>Accès ${a.ecriture ? "lecture + dépôt" : "lecture seule"}, envoyé le ${esc(fmtDateHeure(a.envoyeLe))}.</p>
     ${infosPartage(a)}
     <p style="margin-top:1rem"><button id="renvoyer">${a.sansMail ? "Envoyer le lien par e-mail" : "Renvoyer l'e-mail d'accès"}</button>
-      ${r.telephone && a.motDePasse ? `<a class="bouton" href="${esc(lienSMS(r, a))}">Mot de passe par SMS</a>` : ""}</p>
+      ${r.telephone && a.motDePasse ? `<a class="bouton" href="${esc(lienSMS(r, a))}">Mot de passe par SMS</a>` : ""}
+      ${a.lien && !a.sansMail ? `<a class="bouton" href="${esc(lienMail(p, r, a))}">Envoyer le lien moi-même</a>` : ""}</p>
     <p><button id="droit">Passer en ${a.ecriture ? "lecture seule" : "lecture + dépôt"}</button>
       ${estNC() ? "" : `<span class="doux petit">(un nouvel e-mail est envoyé)</span>`}</p>
     <p><button class="danger" id="retirer">Retirer l'accès</button></p>
@@ -557,6 +559,8 @@ function pageReglages() {
         <div id="champs-nc" ${nc ? "" : "hidden"}>
           <label for="ncurl">Adresse du serveur Nextcloud</label><input id="ncurl" value="${esc(c.nextcloudUrl)}" placeholder="https://cloud.exemple.fr">
           <p class="doux petit">L'adresse de la page de connexion habituelle, sans la fin « /index.php/login ».</p>
+          <label class="case" style="margin-top:.6rem"><input type="checkbox" id="manuel" ${c.ncEnvoiManuel ? "checked" : ""}> J'envoie les liens moi-même, depuis ma messagerie</label>
+          <p class="doux petit">À cocher si les régisseurs ne reçoivent pas les e-mails de Nextcloud (serveur sans envoi d'e-mails, ou messages classés indésirables).</p>
         </div>
         <label for="racine">Dossier contenant les projets</label><input id="racine" value="${esc(c.dossierRacine)}">
         <label for="salle">Signature des invitations</label><input id="salle" value="${esc(c.nomSalle)}" placeholder="ex. La régie technique du Théâtre…">
@@ -585,7 +589,7 @@ function pageReglages() {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const v = (id) => document.getElementById(id).value;
-    const corps = { fournisseur: form.querySelector("[name=fournisseur]:checked").value, nextcloudUrl: v("ncurl"),
+    const corps = { fournisseur: form.querySelector("[name=fournisseur]:checked").value, nextcloudUrl: v("ncurl"), ncEnvoiManuel: document.getElementById("manuel").checked,
       tenantId: v("tenant"), clientId: v("client"), siteUrl: v("site"), dossierRacine: v("racine"), nomSalle: v("salle") };
     if (await action(document.getElementById("ok"), () => api("POST", "/api/config", corps), "Réglages enregistrés")) {
       etat = await api("GET", "/api/etat");

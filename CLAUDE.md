@@ -18,3 +18,4 @@ Application développée par Frédéric Bourset pour une salle de spectacle : pa
 - v1.0.0 : régisseurs, projets, dossier SharePoint par projet, dépôt de documents, invitations lecture / lecture + dépôt, renvoi et retrait d'accès, guide administrateur.
 - v1.0.1 : compte Microsoft personnel (tenant `consumers`, OneDrive perso, sans Sites.*) pour essais ; version Mac.
 - v1.1.0 : Nextcloud (connexion par le navigateur, partage personnel par e-mail ou lien, mot de passe à transmettre par SMS ou copie).
+- v1.1.1 : Nextcloud — option « J'envoie les liens moi-même » (lien type 3 + messagerie), `sendMail=true` explicite, bouton de secours quand l'e-mail Nextcloud n'arrive pas (Nextcloud peut ne rien envoyer sans erreur).
