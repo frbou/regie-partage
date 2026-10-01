@@ -17,7 +17,8 @@ import (
 // TestDemo lance l'application complète contre un faux SharePoint en mémoire,
 // pour essayer l'interface sans compte Microsoft 365 :
 //
-//	DEMO=1 go test -run TestDemo -timeout 0
+//	DEMO=1 go test -run TestDemo -timeout 0          (Microsoft 365)
+//	DEMO=nextcloud go test -run TestDemo -timeout 0  (Nextcloud)
 //
 // puis ouvrir http://localhost:47820/.
 func TestDemo(t *testing.T) {
@@ -33,8 +34,19 @@ func TestDemo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = app.auth.EnregistrerConfig(Config{TenantID: "demo", ClientID: "demo", SiteURL: "https://salle.sharepoint.com/sites/Regie", NomSalle: "La régie du Théâtre"})
-	app.auth.refresh, app.auth.acces, app.auth.expire = "demo", "demo", time.Now().Add(24*time.Hour)
+	if os.Getenv("DEMO") == "nextcloud" {
+		// DEMO=nextcloud : faux serveur Nextcloud (sans « Share by mail » si DEMO_SANS_MAIL=1).
+		nc := nouveauNCFactice()
+		defer nc.srv.Close()
+		nc.sansMail = os.Getenv("DEMO_SANS_MAIL") != ""
+		_ = app.auth.EnregistrerConfig(Config{Fournisseur: fournNextcloud, NextcloudURL: nc.srv.URL, NomSalle: "La régie du Théâtre"})
+		if os.Getenv("DEMO_DECONNECTE") == "" {
+			app.auth.nc = IdentNextcloud{Login: "fred", MotDePasse: "mdp-app", UserID: "fred"}
+		}
+	} else {
+		_ = app.auth.EnregistrerConfig(Config{TenantID: "demo", ClientID: "demo", SiteURL: "https://salle.sharepoint.com/sites/Regie", NomSalle: "La régie du Théâtre"})
+		app.auth.refresh, app.auth.acces, app.auth.expire = "demo", "demo", time.Now().Add(24*time.Hour)
+	}
 	app.auth.compte = &Compte{Nom: "Régie démo", Email: "regie@salle.fr"}
 
 	mux := http.NewServeMux()

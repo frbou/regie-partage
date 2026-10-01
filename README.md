@@ -1,6 +1,6 @@
 # Régie Partage
 
-Partage des documents de projets avec les régisseurs, via le SharePoint Microsoft 365 de la salle. Les régisseurs reçoivent un lien par e-mail et un code de vérification : aucun compte à créer.
+Partage des documents de projets avec les régisseurs, via le SharePoint Microsoft 365 de la salle (lien + code de vérification par e-mail) ou un serveur Nextcloud (lien personnel + mot de passe). Aucun compte à créer pour les régisseurs.
 
 - Utilisation : `docs/LISEZMOI.txt`
 - Mise en place Microsoft 365 : `docs/GUIDE-ADMINISTRATEUR.txt`

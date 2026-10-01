@@ -14,8 +14,17 @@ import (
 type App struct {
 	auth    *Auth
 	graphe  *Graphe
+	nc      *Nextcloud
 	store   *Store
 	quitter func()
+}
+
+// f : fournisseur choisi dans les réglages.
+func (app *App) f() Fournisseur {
+	if app.auth.Config().Nextcloud() {
+		return app.nc
+	}
+	return fournisseurMicrosoft{g: app.graphe, auth: app.auth}
 }
 
 func NouvelleApp(dir, redirect string) (*App, error) {
@@ -23,9 +32,8 @@ func NouvelleApp(dir, redirect string) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	g := NouveauGraphe(a)
-	app := &App{auth: a, graphe: g}
-	app.store = &Store{stock: stockageGraphe{g: g, auth: a}, qui: func() string {
+	app := &App{auth: a, graphe: NouveauGraphe(a), nc: NouveauNextcloud(a)}
+	app.store = &Store{stock: stockageFournisseur{f: app.f}, qui: func() string {
 		if c := a.Compte(); c != nil {
 			return c.Nom
 		}
@@ -51,7 +59,10 @@ func (app *App) Routes(mux *http.ServeMux) {
 			if err != nil {
 				code := http.StatusBadRequest
 				var eg *ErreurGraphe
+				var en *ErreurNextcloud
 				switch {
+				case errors.As(err, &en) && en.Statut >= 500:
+					code = http.StatusBadGateway
 				case errors.Is(err, ErrNonConnecte):
 					code = http.StatusUnauthorized
 				case errors.Is(err, ErrIntrouvable):
@@ -72,7 +83,17 @@ func (app *App) Routes(mux *http.ServeMux) {
 
 	api("GET /api/etat", app.etat)
 	api("POST /api/config", app.config)
-	api("POST /api/deconnexion", func(*http.Request) (any, error) { app.auth.Deconnecter(); return nil, nil })
+	api("POST /api/deconnexion", func(r *http.Request) (any, error) {
+		if app.auth.Config().Nextcloud() {
+			app.nc.Deconnecter(r.Context())
+		}
+		app.auth.Deconnecter()
+		return nil, nil
+	})
+	api("POST /api/connexion/nextcloud", func(r *http.Request) (any, error) {
+		u, err := app.nc.DemarrerConnexion(r.Context())
+		return map[string]string{"url": u}, err
+	})
 	api("POST /api/quitter", func(*http.Request) (any, error) { app.quitter(); return nil, nil })
 
 	api("GET /api/donnees", app.donnees)
@@ -83,7 +104,7 @@ func (app *App) Routes(mux *http.ServeMux) {
 
 	api("GET /api/projets/{id}/documents", app.documents)
 	api("PUT /api/projets/{id}/documents", app.envoyerDocument)
-	api("DELETE /api/projets/{id}/documents/{doc}", app.supprimerDocument)
+	api("DELETE /api/projets/{id}/documents/{doc...}", app.supprimerDocument)
 
 	api("GET /api/projets/{id}/message/{reg}", app.messageParDefaut)
 	api("POST /api/projets/{id}/acces", app.donnerAcces)
@@ -103,6 +124,10 @@ func messageErreur(err error) string {
 			return "Espace de stockage Microsoft 365 plein."
 		}
 	}
+	var en *ErreurNextcloud
+	if errors.As(err, &en) && en.Statut == 403 && strings.Contains(strings.ToLower(en.Message), "shar") {
+		return "Partage refusé par Nextcloud : " + en.Message + " (vérifier les réglages de partage du serveur)."
+	}
 	return err.Error()
 }
 
@@ -119,10 +144,11 @@ func lireJSON(r *http.Request, v any) error {
 func (app *App) etat(*http.Request) (any, error) {
 	cfg := app.auth.Config()
 	return map[string]any{
-		"version":        version,
-		"config":         cfg,
-		"configComplete": cfg.Complete(),
-		"compte":         app.auth.Compte(),
+		"version":            version,
+		"config":             cfg,
+		"configComplete":     cfg.Complete(),
+		"compte":             app.auth.Compte(),
+		"connexionNextcloud": app.nc.EtatConnexion(),
 	}, nil
 }
 
@@ -245,23 +271,30 @@ func (app *App) supprimerRegisseur(r *http.Request) (any, error) {
 	})
 }
 
-// retirer supprime l'accès d'un régisseur sur Microsoft 365 sans toucher
-// aux autres invités qui partageraient la même permission.
+// retirer supprime l'accès d'un régisseur chez le fournisseur.
 func (app *App) retirer(ctx context.Context, d *Donnees, p *Projet, regID string) error {
 	a := p.AccesDe(regID)
 	if a == nil {
 		return nil
 	}
+	return app.f().Retirer(ctx, p.DossierID, *a, accesCommun(p, *a), destinataire(d, regID))
+}
+
+// accesCommun : la permission est partagée avec un autre invité du projet.
+func accesCommun(p *Projet, a Acces) bool {
 	for _, autre := range p.Acces {
-		if autre.RegisseurID != regID && autre.PermissionID == a.PermissionID {
-			reg := d.Regisseur(regID)
-			if reg == nil {
-				return nil
-			}
-			return app.graphe.RetirerDuLien(ctx, p.DossierID, a.PermissionID, reg.Email)
+		if autre.RegisseurID != a.RegisseurID && autre.PermissionID == a.PermissionID {
+			return true
 		}
 	}
-	return app.graphe.RetirerPermission(ctx, p.DossierID, a.PermissionID)
+	return false
+}
+
+func destinataire(d *Donnees, regID string) Destinataire {
+	if r := d.Regisseur(regID); r != nil {
+		return Destinataire{Email: r.Email, Nom: r.NomComplet()}
+	}
+	return Destinataire{}
 }
 
 func sansAcces(as []Acces, regID string) []Acces {
@@ -285,11 +318,11 @@ func (app *App) enregistrerProjet(r *http.Request) (any, error) {
 	ctx := r.Context()
 
 	if p.ID == "" {
-		racine, err := app.graphe.AssurerDossier(ctx, app.auth.Config().DossierRacine)
+		racine, err := app.f().AssurerRacine(ctx)
 		if err != nil {
 			return nil, err
 		}
-		dossier, err := app.graphe.CreerDossier(ctx, racine.ID, NomDossier(p))
+		dossier, err := app.f().CreerDossier(ctx, racine.ID, NomDossier(p))
 		if err != nil {
 			return nil, err
 		}
@@ -300,7 +333,7 @@ func (app *App) enregistrerProjet(r *http.Request) (any, error) {
 			return nil
 		})
 		if err != nil {
-			_ = app.graphe.Supprimer(ctx, dossier.ID)
+			_ = app.f().Supprimer(ctx, dossier.ID)
 		}
 		return d, err
 	}
@@ -313,9 +346,15 @@ func (app *App) enregistrerProjet(r *http.Request) (any, error) {
 	if ancien == nil {
 		return nil, ErrIntrouvable
 	}
+	dossierID, webURL := ancien.DossierID, ancien.WebURL
 	if NomDossier(*ancien) != NomDossier(p) {
-		// Renommage best effort : un conflit de nom laisse l'ancien dossier.
-		_ = app.graphe.Renommer(ctx, ancien.DossierID, NomDossier(p))
+		// Renommage au mieux : un conflit de nom laisse l'ancien dossier.
+		if id, err := app.f().Renommer(ctx, ancien.DossierID, NomDossier(p)); err == nil && id != dossierID {
+			dossierID = id
+			if e, err := app.f().Element(ctx, id); err == nil {
+				webURL = e.WebURL
+			}
+		}
 	}
 	return app.store.Modifier(ctx, func(d *Donnees) error {
 		ex := d.Projet(p.ID)
@@ -323,6 +362,7 @@ func (app *App) enregistrerProjet(r *http.Request) (any, error) {
 			return ErrIntrouvable
 		}
 		ex.Nom, ex.DateDebut, ex.DateFin, ex.Notes, ex.Archive = p.Nom, p.DateDebut, p.DateFin, p.Notes, p.Archive
+		ex.DossierID, ex.WebURL = dossierID, webURL
 		return nil
 	})
 }
@@ -331,9 +371,13 @@ func (app *App) enregistrerProjet(r *http.Request) (any, error) {
 // ses documents restent sur SharePoint (suppression manuelle si voulu).
 func (app *App) supprimerProjet(r *http.Request) (any, error) {
 	id := r.PathValue("id")
-	p, err := app.projet(r.Context(), id)
+	d, _, err := app.store.Charger(r.Context())
 	if err != nil {
 		return nil, err
+	}
+	p := d.Projet(id)
+	if p == nil {
+		return nil, ErrIntrouvable
 	}
 	fait := map[string]bool{}
 	for _, a := range p.Acces {
@@ -341,7 +385,7 @@ func (app *App) supprimerProjet(r *http.Request) (any, error) {
 			continue
 		}
 		fait[a.PermissionID] = true
-		if err := app.graphe.RetirerPermission(r.Context(), p.DossierID, a.PermissionID); err != nil {
+		if err := app.f().Retirer(r.Context(), p.DossierID, a, false, destinataire(d, a.RegisseurID)); err != nil {
 			return nil, err
 		}
 	}
@@ -376,7 +420,7 @@ func (app *App) documents(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	els, err := app.graphe.Enfants(r.Context(), p.DossierID)
+	els, err := app.f().Enfants(r.Context(), p.DossierID)
 	if errors.Is(err, ErrIntrouvable) {
 		return nil, errors.New("le dossier de ce projet a été supprimé ou déplacé sur SharePoint")
 	}
@@ -402,7 +446,7 @@ func (app *App) envoyerDocument(r *http.Request) (any, error) {
 		}
 		return c
 	}, nom)
-	return app.graphe.Envoyer(r.Context(), p.DossierID, nom, r.ContentLength, r.Body)
+	return app.f().Envoyer(r.Context(), p.DossierID, nom, r.ContentLength, r.Body)
 }
 
 func (app *App) supprimerDocument(r *http.Request) (any, error) {
@@ -410,14 +454,14 @@ func (app *App) supprimerDocument(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	e, err := app.graphe.Element(r.Context(), r.PathValue("doc"))
+	e, err := app.f().Element(r.Context(), r.PathValue("doc"))
 	if err != nil {
 		return nil, err
 	}
 	if e.Parent == nil || e.Parent.ID != p.DossierID {
 		return nil, errors.New("ce document n'appartient pas au projet")
 	}
-	return nil, app.graphe.Supprimer(r.Context(), e.ID)
+	return nil, app.f().Supprimer(r.Context(), e.ID)
 }
 
 // --- Accès ---
@@ -434,7 +478,11 @@ func (app *App) messageDefaut(p *Projet, reg *Regisseur) string {
 			fmt.Fprintf(&b, " (le %s)", debut.Format("02/01/2006"))
 		}
 	}
-	b.WriteString(".\nÀ l'ouverture du lien, un code de vérification vous sera envoyé par e-mail : aucun compte à créer.")
+	if app.auth.Config().Nextcloud() {
+		b.WriteString(".\nLe dossier est protégé par un mot de passe, communiqué séparément.")
+	} else {
+		b.WriteString(".\nÀ l'ouverture du lien, un code de vérification vous sera envoyé par e-mail : aucun compte à créer.")
+	}
 	if salle := app.auth.Config().NomSalle; salle != "" {
 		b.WriteString("\n\n" + salle)
 	}
@@ -479,19 +527,23 @@ func (app *App) donnerAcces(r *http.Request) (any, error) {
 	if strings.TrimSpace(dem.Message) == "" {
 		dem.Message = app.messageDefaut(p, reg)
 	}
-	// Changement de droit : on retire l'ancien accès puis on réinvite.
-	if err := app.retirer(ctx, d, p, reg.ID); err != nil {
-		return nil, err
+	dest := destinataire(d, reg.ID)
+	var partage *Partage
+	if ancien := p.AccesDe(reg.ID); ancien != nil {
+		partage, err = app.f().ChangerDroit(ctx, p.DossierID, *ancien, accesCommun(p, *ancien), dest, dem.Ecriture, dem.Message)
+	} else {
+		partage, err = app.f().Partager(ctx, p.DossierID, dest, dem.Ecriture, dem.Message)
 	}
-	perm, err := app.graphe.Inviter(ctx, p.DossierID, reg.Email, dem.Ecriture, true, dem.Message)
 	if err != nil {
-		// L'ancien accès a pu être retiré : on le reflète.
-		_, _ = app.store.Modifier(ctx, func(d *Donnees) error {
-			if x := d.Projet(p.ID); x != nil {
-				x.Acces = sansAcces(x.Acces, reg.ID)
-			}
-			return nil
-		})
+		if p.AccesDe(reg.ID) != nil && !app.auth.Config().Nextcloud() {
+			// Microsoft : l'ancien accès a pu être retiré avant l'échec.
+			_, _ = app.store.Modifier(ctx, func(d *Donnees) error {
+				if x := d.Projet(p.ID); x != nil {
+					x.Acces = sansAcces(x.Acces, reg.ID)
+				}
+				return nil
+			})
+		}
 		return nil, err
 	}
 	return app.store.Modifier(ctx, func(d *Donnees) error {
@@ -499,10 +551,7 @@ func (app *App) donnerAcces(r *http.Request) (any, error) {
 		if x == nil {
 			return ErrIntrouvable
 		}
-		x.Acces = append(sansAcces(x.Acces, reg.ID), Acces{
-			RegisseurID: reg.ID, Ecriture: dem.Ecriture, PermissionID: perm,
-			EnvoyeLe: time.Now().Format(time.RFC3339),
-		})
+		x.Acces = append(sansAcces(x.Acces, reg.ID), partage.versAcces(reg.ID, dem.Ecriture, time.Now().Format(time.RFC3339)))
 		return nil
 	})
 }
@@ -518,14 +567,14 @@ func (app *App) renvoyerAcces(r *http.Request) (any, error) {
 		return nil, ErrIntrouvable
 	}
 	a := p.AccesDe(reg.ID)
-	perm, err := app.graphe.Inviter(ctx, p.DossierID, reg.Email, a.Ecriture, true, app.messageDefaut(p, reg))
+	partage, err := app.f().Renvoyer(ctx, p.DossierID, *a, destinataire(d, reg.ID), app.messageDefaut(p, reg))
 	if err != nil {
 		return nil, err
 	}
 	return app.store.Modifier(ctx, func(d *Donnees) error {
 		if x := d.Projet(p.ID); x != nil {
 			if a := x.AccesDe(reg.ID); a != nil {
-				a.PermissionID, a.EnvoyeLe = perm, time.Now().Format(time.RFC3339)
+				*a = partage.versAcces(reg.ID, a.Ecriture, time.Now().Format(time.RFC3339))
 			}
 		}
 		return nil

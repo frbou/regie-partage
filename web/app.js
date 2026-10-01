@@ -27,7 +27,7 @@ async function api(methode, chemin, corps) {
   if (r.status === 401) {
     etat.compte = null;
     afficher();
-    throw new Error("Connexion Microsoft 365 expirée : se reconnecter.");
+    throw new Error(`Connexion ${compteService()} expirée : se reconnecter.`);
   }
   if (!r.ok) throw new Error(json.erreur || "Erreur " + r.status);
   return json;
@@ -68,6 +68,10 @@ function fmtTaille(o) {
   return (o / (1 << 20)).toFixed(1).replace(".", ",") + " Mo";
 }
 const nomComplet = (r) => [r.prenom, r.nom].filter(Boolean).join(" ");
+// Nom du service de stockage, pour les textes de l'interface.
+const estNC = () => etat?.config?.fournisseur === "nextcloud";
+const service = () => estNC() ? "Nextcloud" : etat?.config?.tenantId === "consumers" ? "OneDrive" : "SharePoint";
+const compteService = () => estNC() ? "Nextcloud" : "Microsoft 365";
 const extension = (nom) => (nom.includes(".") ? nom.split(".").pop().slice(0, 4).toUpperCase() : "—");
 
 function ouvrirDialogue(html, initialiser) {
@@ -113,7 +117,7 @@ async function afficher() {
   if (!etat.compte) return pageConnexion();
 
   if (!donnees) {
-    vue.innerHTML = `<p class="attente">Chargement depuis Microsoft 365…</p>`;
+    vue.innerHTML = `<p class="attente">Chargement depuis ${compteService()}…</p>`;
     try {
       donnees = await api("GET", "/api/donnees");
     } catch (e) {
@@ -134,8 +138,39 @@ async function recharger() {
 function pageConnexion() {
   vue.innerHTML = `<div class="carte bloc-connexion">
     <h1>Bienvenue</h1>
-    <p class="doux">Connectez-vous avec le compte Microsoft 365 de la salle pour accéder aux projets.</p>
-    <p><a class="bouton principal" href="/auth/connexion">Se connecter à Microsoft 365</a></p></div>`;
+    <p class="doux">Connectez-vous avec le compte ${compteService()} ${estNC() ? "" : "de la salle "}pour accéder aux projets.</p>
+    <p>${boutonConnexion()}</p><p class="doux petit" id="attente-nc"></p></div>`;
+  brancherConnexion();
+}
+
+function boutonConnexion() {
+  return estNC() ? `<button class="principal" id="connexion-nc">Se connecter à Nextcloud</button>`
+    : `<a class="bouton principal" href="/auth/connexion">Se connecter à Microsoft 365</a>`;
+}
+
+// Nextcloud : la page d'autorisation s'ouvre dans un nouvel onglet ;
+// on attend que le serveur confirme la connexion.
+function brancherConnexion() {
+  const b = document.getElementById("connexion-nc");
+  if (!b) return;
+  b.onclick = async () => {
+    const onglet = window.open("about:blank", "_blank");
+    const r = await action(b, () => api("POST", "/api/connexion/nextcloud"));
+    if (!r) { onglet?.close(); return; }
+    if (onglet) onglet.location = r.url; else location.href = r.url;
+    const info = document.getElementById("attente-nc");
+    if (info) info.textContent = "Autorisez Régie Partage dans l'onglet Nextcloud qui vient de s'ouvrir, puis revenez ici.";
+    b.disabled = true;
+    const fin = Date.now() + 20 * 60 * 1000;
+    while (Date.now() < fin) {
+      await new Promise((ok) => setTimeout(ok, 2000));
+      etat = await api("GET", "/api/etat").catch(() => etat);
+      const e = etat.connexionNextcloud;
+      if (e === "ok" || etat.compte) { toast("Connecté à Nextcloud"); donnees = null; afficher(); return; }
+      if (e && e !== "attente") { toast(e, true); b.disabled = false; return; }
+    }
+    b.disabled = false;
+  };
 }
 
 // --- Projets ---
@@ -147,7 +182,7 @@ function pageProjets() {
   const nbArchives = donnees.projets.filter((p) => p.archive).length;
   vue.innerHTML = `
     <div class="entete">
-      <div><h1>Projets</h1><p class="doux">Un dossier SharePoint par projet, partagé avec ses régisseurs.</p></div>
+      <div><h1>Projets</h1><p class="doux">Un dossier ${service()} par projet, partagé avec ses régisseurs.</p></div>
       <div class="actions">
         ${nbArchives ? `<button id="archives">${voirArchives ? "Masquer" : "Afficher"} les archives (${nbArchives})</button>` : ""}
         <button class="principal" id="nouveau">+ Nouveau projet</button>
@@ -185,7 +220,7 @@ function formProjet(p = {}) {
         dateFin: d.querySelector("#fin").value, notes: d.querySelector("#notes").value,
         archive: d.querySelector("#archive")?.checked ?? false,
       };
-      const r = await action(d.querySelector("#ok"), () => api("POST", "/api/projets", corps), p.id ? "Projet enregistré" : "Projet et dossier SharePoint créés");
+      const r = await action(d.querySelector("#ok"), () => api("POST", "/api/projets", corps), p.id ? "Projet enregistré" : `Projet et dossier ${service()} créés`);
       if (!r) return;
       donnees = r;
       d.close();
@@ -213,7 +248,7 @@ async function pageProjet(id) {
         <p class="doux">${esc(fmtPeriode(p))}${p.archive ? " · archivé" : ""}</p>
       </div>
       <div class="actions">
-        ${p.webUrl ? `<a class="bouton" href="${esc(p.webUrl)}" target="_blank" rel="noopener">Ouvrir dans SharePoint ↗</a>` : ""}
+        ${p.webUrl ? `<a class="bouton" href="${esc(p.webUrl)}" target="_blank" rel="noopener">Ouvrir dans ${service()} ↗</a>` : ""}
         <button id="modifier">Modifier</button>
         <button class="danger" id="supprimer">Supprimer</button>
       </div>
@@ -252,7 +287,7 @@ async function pageProjet(id) {
 
   document.getElementById("modifier").onclick = () => formProjet(p);
   document.getElementById("supprimer").onclick = async (e) => {
-    if (!(await confirmer("Supprimer le projet ?", `Tous les accès des régisseurs à « ${p.nom} » seront retirés. Le dossier et ses documents restent sur SharePoint.`, "Supprimer"))) return;
+    if (!(await confirmer("Supprimer le projet ?", `Tous les accès des régisseurs à « ${p.nom} » seront retirés. Le dossier et ses documents restent sur ${service()}.`, "Supprimer"))) return;
     const r = await action(e.target, () => api("DELETE", "/api/projets/" + p.id), "Projet supprimé");
     if (r) { donnees = r; location.hash = "#/projets"; }
   };
@@ -266,7 +301,7 @@ async function pageProjet(id) {
       const m = await action(null, () => api("GET", `/api/projets/${p.id}/message/${regId}`));
       if (!m) return;
       ouvrirDialogue(`<h2>Message d'invitation</h2>
-        <p class="doux petit">Joint à l'e-mail envoyé par Microsoft avec le lien d'accès.</p>
+        <p class="doux petit">${estNC() ? "Joint au partage (note visible par le régisseur ; incluse dans l'e-mail si Nextcloud l'envoie)." : "Joint à l'e-mail envoyé par Microsoft avec le lien d'accès."}</p>
         <textarea id="msg" style="min-height:12rem">${esc(m.message)}</textarea>
         <div class="pied"><button data-fermer>Annuler</button><button class="principal" id="ok">Envoyer l'accès</button></div>`,
         (d) => (d.querySelector("#ok").onclick = async (e) => { if (await inviter(p, e.target, d.querySelector("#msg").value)) d.close(); }));
@@ -289,10 +324,58 @@ async function inviter(p, bouton, message) {
   const regisseurId = document.getElementById("qui").value;
   const ecriture = document.getElementById("droit").value === "1";
   const r = donnees.regisseurs.find((x) => x.id === regisseurId);
-  const res = await action(bouton, () => api("POST", `/api/projets/${p.id}/acces`, { regisseurId, ecriture, message: message || "" }),
-    `Accès envoyé à ${nomComplet(r)} (${r.email})`);
-  if (res) { donnees = res; pageProjet(p.id); }
+  const res = await action(bouton, () => api("POST", `/api/projets/${p.id}/acces`, { regisseurId, ecriture, message: message || "" }));
+  if (res) {
+    donnees = res;
+    pageProjet(p.id);
+    apresEnvoi(res.projets.find((x) => x.id === p.id), regisseurId, message);
+  }
   return !!res;
+}
+
+// apresEnvoi : confirme l'envoi, ou affiche lien et mot de passe à transmettre.
+function apresEnvoi(p, regId, message) {
+  const r = donnees.regisseurs.find((x) => x.id === regId);
+  const a = p?.acces.find((x) => x.regisseurId === regId);
+  if (!a || (!a.motDePasse && !a.sansMail)) { toast(`Accès envoyé à ${nomComplet(r)} (${r.email})`); return; }
+  ouvrirDialogue(`<h2>${a.sansMail ? "Lien à envoyer" : "Accès envoyé"}</h2>
+    <p>${a.sansMail
+      ? `Votre Nextcloud n'envoie pas d'e-mail de partage : transmettez ce lien personnel à <strong>${esc(nomComplet(r))}</strong>.`
+      : `Nextcloud a envoyé le lien à <strong>${esc(nomComplet(r))}</strong> (${esc(r.email)}).`}</p>
+    ${infosPartage(a)}
+    <p class="doux petit">Le mot de passe se communique séparément (SMS, téléphone)${a.sansMail ? "" : ". Selon le réglage du serveur, Nextcloud l'envoie aussi dans un second e-mail"}.</p>
+    <div class="pied">
+      ${a.sansMail ? `<a class="bouton principal" href="${esc(lienMail(p, r, a, message))}">Envoyer le lien par e-mail</a>` : ""}
+      ${r.telephone && a.motDePasse ? `<a class="bouton" href="${esc(lienSMS(r, a))}">Mot de passe par SMS</a>` : ""}
+      <button data-fermer>Fermer</button></div>`, brancherCopie);
+}
+
+function infosPartage(a) {
+  return `${a.lien ? `<label>Lien personnel</label>
+      <div class="ligne-copie"><input readonly value="${esc(a.lien)}"><button type="button" data-copie="${esc(a.lien)}">Copier</button></div>` : ""}
+    ${a.motDePasse ? `<label>Mot de passe</label>
+      <div class="ligne-copie"><input readonly class="mdp" value="${esc(a.motDePasse)}"><button type="button" data-copie="${esc(a.motDePasse)}">Copier</button></div>` : ""}`;
+}
+
+function brancherCopie(d) {
+  d.querySelectorAll("[data-copie]").forEach((b) => (b.onclick = async () => {
+    try { await navigator.clipboard.writeText(b.dataset.copie); } catch {
+      const champ = b.previousElementSibling; champ.select(); document.execCommand("copy");
+    }
+    b.textContent = "Copié ✓";
+    setTimeout(() => (b.textContent = "Copier"), 2000);
+  }));
+}
+
+function lienMail(p, r, a, message) {
+  const corps = (message || `Bonjour ${r.prenom},\n\nVoici l'accès au dossier de documents du projet « ${p.nom} ».`) +
+    `\n\nLien : ${a.lien}\n(Le mot de passe vous est communiqué séparément.)` +
+    (etat.config.nomSalle && !message ? `\n\n${etat.config.nomSalle}` : "");
+  return `mailto:${encodeURIComponent(r.email)}?subject=${encodeURIComponent("Documents — " + p.nom)}&body=${encodeURIComponent(corps)}`;
+}
+
+function lienSMS(r, a) {
+  return `sms:${r.telephone.replace(/[^+0-9]/g, "")}?&body=${encodeURIComponent("Mot de passe du dossier de documents : " + a.motDePasse)}`;
 }
 
 function optionsAcces(p, regId) {
@@ -300,13 +383,24 @@ function optionsAcces(p, regId) {
   const a = p.acces.find((x) => x.regisseurId === regId);
   ouvrirDialogue(`<h2>${esc(nomComplet(r))}</h2>
     <p class="doux">${esc(r.email)}<br>Accès ${a.ecriture ? "lecture + dépôt" : "lecture seule"}, envoyé le ${esc(fmtDateHeure(a.envoyeLe))}.</p>
-    <p><button id="renvoyer">Renvoyer l'e-mail d'accès</button></p>
+    ${infosPartage(a)}
+    <p style="margin-top:1rem"><button id="renvoyer">${a.sansMail ? "Envoyer le lien par e-mail" : "Renvoyer l'e-mail d'accès"}</button>
+      ${r.telephone && a.motDePasse ? `<a class="bouton" href="${esc(lienSMS(r, a))}">Mot de passe par SMS</a>` : ""}</p>
     <p><button id="droit">Passer en ${a.ecriture ? "lecture seule" : "lecture + dépôt"}</button>
-      <span class="doux petit">(un nouvel e-mail est envoyé)</span></p>
+      ${estNC() ? "" : `<span class="doux petit">(un nouvel e-mail est envoyé)</span>`}</p>
     <p><button class="danger" id="retirer">Retirer l'accès</button></p>
     <div class="pied"><button data-fermer>Fermer</button></div>`, (d) => {
+    brancherCopie(d);
     const fin = (res) => { if (res) { donnees = res; d.close(); pageProjet(p.id); } };
-    d.querySelector("#renvoyer").onclick = async (e) => fin(await action(e.target, () => api("POST", `/api/projets/${p.id}/acces/${regId}/renvoyer`), "E-mail renvoyé"));
+    d.querySelector("#renvoyer").onclick = async (e) => {
+      if (a.sansMail) { location.href = lienMail(p, r, a); return; }
+      const res = await action(e.target, () => api("POST", `/api/projets/${p.id}/acces/${regId}/renvoyer`));
+      if (!res) return;
+      fin(res);
+      const na = res.projets.find((x) => x.id === p.id)?.acces.find((x) => x.regisseurId === regId);
+      if (na?.sansMail) { toast("Nextcloud n'a pas pu renvoyer l'e-mail : envoyez le lien vous-même.", true); apresEnvoi(res.projets.find((x) => x.id === p.id), regId); }
+      else toast("E-mail renvoyé");
+    };
     d.querySelector("#droit").onclick = async (e) => fin(await action(e.target, () => api("POST", `/api/projets/${p.id}/acces`, { regisseurId: regId, ecriture: !a.ecriture, message: "" }), "Droit modifié"));
     d.querySelector("#retirer").onclick = async (e) => fin(await action(e.target, () => api("DELETE", `/api/projets/${p.id}/acces/${regId}`), "Accès retiré"));
   });
@@ -331,8 +425,8 @@ async function chargerDocuments(p) {
       ${d.folder ? "" : `<button class="lien" title="Supprimer" data-suppr="${esc(d.id)}" data-nom="${esc(d.name)}">✕</button>`}
     </div>`).join("") : `<p class="doux">Aucun document. Les fichiers déposés ici seront visibles par les régisseurs invités.</p>`;
   zone.querySelectorAll("[data-suppr]").forEach((b) => (b.onclick = async () => {
-    if (!(await confirmer("Supprimer ce document ?", `« ${b.dataset.nom} » ira dans la corbeille SharePoint (récupérable pendant 93 jours).`, "Supprimer"))) return;
-    if (await action(b, () => api("DELETE", `/api/projets/${p.id}/documents/${b.dataset.suppr}`), "Document supprimé")) chargerDocuments(p);
+    if (!(await confirmer("Supprimer ce document ?", `« ${b.dataset.nom} » ira dans la corbeille ${service()} (récupérable pendant un temps).`, "Supprimer"))) return;
+    if (await action(b, () => api("DELETE", `/api/projets/${p.id}/documents/${encodeURIComponent(b.dataset.suppr)}`), "Document supprimé")) chargerDocuments(p);
   }));
 }
 
@@ -442,37 +536,57 @@ function formRegisseur(r = {}) {
 
 function pageReglages() {
   const c = etat.config;
+  const nc = c.fournisseur === "nextcloud";
   vue.innerHTML = `
     <div class="entete"><div><h1>Réglages</h1><p class="doux">Version ${esc(etat.version)}</p></div></div>
     <div class="deux">
       <form class="carte" id="f">
-        <h2>Microsoft 365 de la salle</h2>
-        <p class="doux petit">Valeurs fournies par l'administrateur Microsoft 365 (voir le guide administrateur livré avec l'application).</p>
-        <label for="tenant">ID de l'annuaire (tenant)</label><input id="tenant" required value="${esc(c.tenantId)}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
-        <p class="doux petit">Compte Microsoft personnel (OneDrive perso, pour essayer) : saisir <code>consumers</code> et laisser le site vide.</p>
-        <label for="client">ID de l'application (client)</label><input id="client" required value="${esc(c.clientId)}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
-        <label for="site">Adresse du site SharePoint</label><input id="site" value="${esc(c.siteUrl)}" placeholder="https://masalle.sharepoint.com/sites/Regie">
-        <p class="doux petit">Vide = OneDrive de la personne connectée (déconseillé : les dossiers disparaissent si elle quitte la salle).</p>
+        <h2>Stockage des documents</h2>
+        <div class="choix">
+          <label class="case"><input type="radio" name="fournisseur" value="microsoft" ${nc ? "" : "checked"}> Microsoft 365 (SharePoint / OneDrive)</label>
+          <label class="case"><input type="radio" name="fournisseur" value="nextcloud" ${nc ? "checked" : ""}> Nextcloud</label>
+        </div>
+        <div id="champs-ms" ${nc ? "hidden" : ""}>
+          <p class="doux petit">Valeurs fournies par l'administrateur Microsoft 365 (voir le guide administrateur livré avec l'application).</p>
+          <label for="tenant">ID de l'annuaire (tenant)</label><input id="tenant" value="${esc(c.tenantId)}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+          <p class="doux petit">Compte Microsoft personnel (OneDrive perso, pour essayer) : saisir <code>consumers</code> et laisser le site vide.</p>
+          <label for="client">ID de l'application (client)</label><input id="client" value="${esc(c.clientId)}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+          <label for="site">Adresse du site SharePoint</label><input id="site" value="${esc(c.siteUrl)}" placeholder="https://masalle.sharepoint.com/sites/Regie">
+          <p class="doux petit">Vide = OneDrive de la personne connectée (déconseillé : les dossiers disparaissent si elle quitte la salle).</p>
+        </div>
+        <div id="champs-nc" ${nc ? "" : "hidden"}>
+          <label for="ncurl">Adresse du serveur Nextcloud</label><input id="ncurl" value="${esc(c.nextcloudUrl)}" placeholder="https://cloud.exemple.fr">
+          <p class="doux petit">L'adresse de la page de connexion habituelle, sans la fin « /index.php/login ».</p>
+        </div>
         <label for="racine">Dossier contenant les projets</label><input id="racine" value="${esc(c.dossierRacine)}">
         <label for="salle">Signature des invitations</label><input id="salle" value="${esc(c.nomSalle)}" placeholder="ex. La régie technique du Théâtre…">
+        <p class="doux petit">Changer de service ou de serveur demande de se reconnecter. Les projets ne sont pas transférés d'un service à l'autre.</p>
         <p style="margin-top:1rem"><button class="principal" id="ok">Enregistrer</button></p>
       </form>
       <section class="carte">
         <h2>Compte</h2>
-        ${etat.compte ? `<p>Connecté : <strong>${esc(etat.compte.nom)}</strong><br><span class="doux">${esc(etat.compte.email)}</span></p>
+        ${etat.compte ? `<p>Connecté à ${compteService()} : <strong>${esc(etat.compte.nom)}</strong><br><span class="doux">${esc(etat.compte.email)}</span></p>
           <p><button id="deco">Se déconnecter</button></p>`
-        : etat.configComplete ? `<p><a class="bouton principal" href="/auth/connexion">Se connecter à Microsoft 365</a></p>`
+        : etat.configComplete ? `<p>${boutonConnexion()}</p><p class="doux petit" id="attente-nc"></p>`
         : `<p class="doux">Renseigner les réglages pour pouvoir se connecter.</p>`}
         <hr style="border:none;border-top:1px solid var(--ligne);margin:1rem 0">
         <h2>Quitter</h2>
-        <p class="doux petit">Arrête l'application sur ce poste. Les données restent sur SharePoint.</p>
+        <p class="doux petit">Arrête l'application sur ce poste. Les données restent sur ${service()}.</p>
         <p><button id="quitter">Quitter Régie Partage</button></p>
       </section>
     </div>`;
-  document.getElementById("f").onsubmit = async (e) => {
+  const form = document.getElementById("f");
+  form.querySelectorAll("[name=fournisseur]").forEach((r) => (r.onchange = () => {
+    const ncChoisi = form.querySelector("[name=fournisseur]:checked").value === "nextcloud";
+    document.getElementById("champs-ms").hidden = ncChoisi;
+    document.getElementById("champs-nc").hidden = !ncChoisi;
+  }));
+  brancherConnexion();
+  form.onsubmit = async (e) => {
     e.preventDefault();
     const v = (id) => document.getElementById(id).value;
-    const corps = { tenantId: v("tenant"), clientId: v("client"), siteUrl: v("site"), dossierRacine: v("racine"), nomSalle: v("salle") };
+    const corps = { fournisseur: form.querySelector("[name=fournisseur]:checked").value, nextcloudUrl: v("ncurl"),
+      tenantId: v("tenant"), clientId: v("client"), siteUrl: v("site"), dossierRacine: v("racine"), nomSalle: v("salle") };
     if (await action(document.getElementById("ok"), () => api("POST", "/api/config", corps), "Réglages enregistrés")) {
       etat = await api("GET", "/api/etat");
       donnees = null;
@@ -480,7 +594,7 @@ function pageReglages() {
     }
   };
   const deco = document.getElementById("deco");
-  if (deco) deco.onclick = async () => { await action(deco, () => api("POST", "/api/deconnexion")); etat.compte = null; donnees = null; afficher(); };
+  if (deco) deco.onclick = async () => { await action(deco, () => api("POST", "/api/deconnexion")); etat = await api("GET", "/api/etat"); donnees = null; afficher(); };
   document.getElementById("quitter").onclick = async () => {
     await api("POST", "/api/quitter").catch(() => {});
     document.body.innerHTML = `<main><div class="carte bloc-connexion"><h1>Régie Partage est fermée</h1><p class="doux">Vous pouvez fermer cet onglet.</p></div></main>`;

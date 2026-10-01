@@ -128,3 +128,9 @@ dialog .pied { display: flex; justify-content: flex-end; gap: .5rem; margin-top:
 #toasts { position: fixed; bottom: 1rem; right: 1rem; display: flex; flex-direction: column; gap: .5rem; z-index: 20; }
 .toast { background: var(--texte); color: var(--fond); padding: .6rem 1rem; border-radius: 8px; max-width: 26rem; box-shadow: 0 4px 16px rgb(0 0 0 / .2); }
 .toast.erreur { background: var(--alerte); color: #fff; }
+
+.ligne-copie { display: flex; gap: .4rem; }
+.ligne-copie input { flex: 1; min-width: 0; }
+.ligne-copie .mdp { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .05em; }
+.choix { display: flex; flex-direction: column; gap: .3rem; margin-bottom: .5rem; }
+[hidden] { display: none !important; }

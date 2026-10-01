@@ -2,7 +2,8 @@ RÉGIE PARTAGE
 =============
 
 Partager simplement les documents de chaque projet (plans, fiches techniques,
-conduites…) avec les régisseurs, via le SharePoint de la salle.
+conduites…) avec les régisseurs, via le SharePoint de la salle (Microsoft 365) ou un
+serveur Nextcloud.
 
 LANCER
   Double-cliquer sur RegiePartage.exe. L'application s'ouvre dans le
@@ -30,3 +31,5 @@ BON À SAVOIR
     SharePoint. Un document supprimé va dans la corbeille SharePoint.
   - Un régisseur qui ne trouve pas l'e-mail : « ••• » > Renvoyer l'e-mail
     d'accès (et vérifier ses indésirables).
+  - Avec Nextcloud : chaque régisseur a un lien personnel et un mot de passe
+    (affichés dans « ••• »), à lui communiquer séparément (SMS, téléphone).

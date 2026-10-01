@@ -119,3 +119,31 @@ mais le principe est le même.
        - Adresse du site SharePoint : vide
   d. Se connecter avec le compte personnel. Les projets sont créés dans le
      OneDrive, dossier « Régie Partage ».
+
+
+AVEC NEXTCLOUD (AU LIEU DE MICROSOFT 365)
+-----------------------------------------
+Rien à déclarer côté serveur : il suffit d'un compte Nextcloud.
+
+  a. Régie Partage > Réglages > Stockage : choisir « Nextcloud », saisir
+     l'adresse du serveur (ex. https://cloud.exemple.fr), Enregistrer.
+  b. « Se connecter à Nextcloud » : un onglet Nextcloud s'ouvre ; se connecter
+     et cliquer « Autoriser l'accès ». Revenir sur Régie Partage, qui se met à
+     jour seule. Nextcloud crée un « mot de passe d'application » révocable
+     (Paramètres personnels > Sécurité > Appareils et sessions).
+
+Partage avec les régisseurs : chaque régisseur reçoit un partage personnel,
+protégé par un mot de passe généré par Régie Partage.
+  - Si l'application Nextcloud « Share by mail » (Partage par e-mail) est
+    active, Nextcloud envoie lui-même le lien par e-mail. Selon le réglage du
+    serveur, il envoie aussi le mot de passe dans un second e-mail.
+  - Sinon, Régie Partage affiche le lien : bouton « Envoyer le lien par
+    e-mail » (ouvre votre messagerie) ou « Copier ».
+  - Le mot de passe se communique séparément : bouton « Mot de passe par
+    SMS » si le téléphone du régisseur est renseigné, ou « Copier ».
+  - Retirer l'accès supprime ce seul partage : les autres régisseurs gardent
+    le leur.
+
+Côté serveur (administrateur Nextcloud), vérifier dans Paramètres
+d'administration > Partage : « Autoriser le partage par lien public » et,
+pour le droit « lecture + dépôt », « Autoriser les téléversements publics ».

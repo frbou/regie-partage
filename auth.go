@@ -34,9 +34,16 @@ func (c Config) scopes() string {
 	return "offline_access User.Read Files.ReadWrite.All Sites.ReadWrite.All"
 }
 
-var ErrNonConnecte = errors.New("non connecté à Microsoft 365")
+var ErrNonConnecte = errors.New("non connecté : se reconnecter")
+
+const (
+	fournMicrosoft = "microsoft"
+	fournNextcloud = "nextcloud"
+)
 
 type Config struct {
+	Fournisseur   string `json:"fournisseur"`  // microsoft (défaut) ou nextcloud
+	NextcloudURL  string `json:"nextcloudUrl"` // ex. https://cloud.exemple.fr
 	TenantID      string `json:"tenantId"`
 	ClientID      string `json:"clientId"`
 	SiteURL       string `json:"siteUrl"`       // vide = OneDrive de la personne connectée
@@ -44,7 +51,12 @@ type Config struct {
 	NomSalle      string `json:"nomSalle"`      // signature des invitations
 }
 
+func (c Config) Nextcloud() bool { return c.Fournisseur == fournNextcloud }
+
 func (c Config) Complete() bool {
+	if c.Nextcloud() {
+		return c.NextcloudURL != "" && c.DossierRacine != ""
+	}
 	return c.TenantID != "" && c.ClientID != "" && c.DossierRacine != ""
 }
 
@@ -65,6 +77,13 @@ type Auth struct {
 	expire    time.Time
 	compte    *Compte
 	enAttente map[string]string // state → code_verifier
+	nc        IdentNextcloud    // connexion Nextcloud (mot de passe d'application)
+}
+
+type IdentNextcloud struct {
+	Login      string `json:"login"`
+	MotDePasse string `json:"motDePasse"`
+	UserID     string `json:"userId"`
 }
 
 func NouvelleAuth(dir, redirect string) (*Auth, error) {
@@ -78,11 +97,12 @@ func NouvelleAuth(dir, redirect string) (*Auth, error) {
 	if b, err := os.ReadFile(filepath.Join(dir, "jeton.bin")); err == nil {
 		if clair, err := deproteger(b); err == nil {
 			var j struct {
-				Refresh string  `json:"refresh"`
-				Compte  *Compte `json:"compte"`
+				Refresh string         `json:"refresh"`
+				Compte  *Compte        `json:"compte"`
+				NC      IdentNextcloud `json:"nextcloud"`
 			}
 			if json.Unmarshal(clair, &j) == nil {
-				a.refresh, a.compte = j.Refresh, j.Compte
+				a.refresh, a.compte, a.nc = j.Refresh, j.Compte, j.NC
 			}
 		}
 	}
@@ -103,6 +123,16 @@ func (a *Auth) EnregistrerConfig(c Config) error {
 	c.SiteURL = strings.TrimRight(strings.TrimSpace(c.SiteURL), "/")
 	c.DossierRacine = strings.Trim(strings.TrimSpace(c.DossierRacine), "/")
 	c.NomSalle = strings.TrimSpace(c.NomSalle)
+	c.NextcloudURL = strings.TrimRight(strings.TrimSpace(c.NextcloudURL), "/")
+	c.NextcloudURL = strings.TrimSuffix(c.NextcloudURL, "/index.php")
+	if c.Fournisseur != fournNextcloud {
+		c.Fournisseur = fournMicrosoft
+	}
+	if c.Nextcloud() {
+		if u, err := url.Parse(c.NextcloudURL); err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
+			return errors.New("adresse du serveur Nextcloud invalide (ex. https://cloud.exemple.fr)")
+		}
+	}
 	if strings.EqualFold(c.TenantID, tenantPerso) {
 		c.TenantID, c.SiteURL = tenantPerso, ""
 	}
@@ -118,7 +148,8 @@ func (a *Auth) EnregistrerConfig(c Config) error {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if c.TenantID != a.cfg.TenantID || c.ClientID != a.cfg.ClientID {
+	if c.TenantID != a.cfg.TenantID || c.ClientID != a.cfg.ClientID ||
+		c.Fournisseur != a.cfg.Fournisseur || c.NextcloudURL != a.cfg.NextcloudURL {
 		a.oublierLocked()
 	}
 	a.cfg = c
@@ -128,10 +159,35 @@ func (a *Auth) EnregistrerConfig(c Config) error {
 func (a *Auth) Compte() *Compte {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.refresh == "" {
+	if !a.connecteLocked() {
 		return nil
 	}
 	return a.compte
+}
+
+func (a *Auth) connecteLocked() bool {
+	if a.cfg.Nextcloud() {
+		return a.nc.MotDePasse != ""
+	}
+	return a.refresh != ""
+}
+
+// Nextcloud renvoie l'identité Nextcloud enregistrée (ErrNonConnecte sinon).
+func (a *Auth) Nextcloud() (IdentNextcloud, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.nc.MotDePasse == "" {
+		return a.nc, ErrNonConnecte
+	}
+	return a.nc, nil
+}
+
+// ConnecterNextcloud enregistre une connexion Nextcloud réussie.
+func (a *Auth) ConnecterNextcloud(id IdentNextcloud, c *Compte) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.nc, a.compte = id, c
+	return a.sauverLocked()
 }
 
 func (a *Auth) point(p string) string {
@@ -282,12 +338,12 @@ func (a *Auth) Deconnecter() {
 }
 
 func (a *Auth) oublierLocked() {
-	a.refresh, a.acces, a.compte = "", "", nil
+	a.refresh, a.acces, a.compte, a.nc = "", "", nil, IdentNextcloud{}
 	_ = os.Remove(filepath.Join(a.dir, "jeton.bin"))
 }
 
 func (a *Auth) sauverLocked() error {
-	clair, _ := json.Marshal(map[string]any{"refresh": a.refresh, "compte": a.compte})
+	clair, _ := json.Marshal(map[string]any{"refresh": a.refresh, "compte": a.compte, "nextcloud": a.nc})
 	chiffre, err := proteger(clair)
 	if err != nil {
 		return err

@@ -33,6 +33,9 @@ type Acces struct {
 	Ecriture     bool   `json:"ecriture"` // false = lecture seule
 	PermissionID string `json:"permissionId"`
 	EnvoyeLe     string `json:"envoyeLe"`
+	Lien         string `json:"lien,omitempty"`       // lien personnel (Nextcloud)
+	MotDePasse   string `json:"motDePasse,omitempty"` // à communiquer séparément
+	SansMail     bool   `json:"sansMail,omitempty"`   // e-mail à envoyer soi-même
 }
 
 type Projet struct {
@@ -250,25 +253,14 @@ func nouvelID(prefixe string) string {
 	return prefixe + "_" + strings.ToLower(strings.NewReplacer("-", "", "_", "").Replace(aleatoire(9)))
 }
 
-// --- Stockage SharePoint ---
+// --- Stockage chez le fournisseur ---
 
-type stockageGraphe struct {
-	g    *Graphe
-	auth *Auth
+type stockageFournisseur struct{ f func() Fournisseur }
+
+func (s stockageFournisseur) Lire(ctx context.Context) ([]byte, string, error) {
+	return s.f().LireDonnees(ctx)
 }
 
-func (s stockageGraphe) chemin() string {
-	return s.auth.Config().DossierRacine + "/" + fichierDonnees
-}
-
-func (s stockageGraphe) Lire(ctx context.Context) ([]byte, string, error) {
-	return s.g.LireFichier(ctx, s.chemin())
-}
-
-func (s stockageGraphe) Ecrire(ctx context.Context, b []byte, etag string) error {
-	if _, err := s.g.AssurerDossier(ctx, s.auth.Config().DossierRacine); err != nil {
-		return err
-	}
-	_, err := s.g.EcrireFichier(ctx, s.chemin(), b, etag)
-	return err
+func (s stockageFournisseur) Ecrire(ctx context.Context, b []byte, etag string) error {
+	return s.f().EcrireDonnees(ctx, b, etag)
 }
