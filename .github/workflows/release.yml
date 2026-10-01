@@ -1,10 +1,17 @@
-# À chaque tag vX.Y.Z poussé : compile l'exécutable Windows et publie la
-# Release avec RegiePartage-X.Y.Z-windows.zip.
+# Publie la Release avec RegiePartage-X.Y.Z-windows.zip :
+#  - soit en poussant un tag vX.Y.Z ;
+#  - soit depuis GitHub : Actions > Release > Run workflow, en saisissant la
+#    version (le tag vX.Y.Z est alors créé sur le dernier commit de main).
 name: Release
 
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version à publier (ex. 1.0.0)'
+        required: true
 
 permissions:
   contents: write
@@ -17,13 +24,22 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then V="${{ inputs.version }}"; else V="${GITHUB_REF_NAME#v}"; fi
+          V="${V#v}"
+          echo "V=$V" >> "$GITHUB_ENV"
       - name: Compilation
-        run: VERSION="${GITHUB_REF_NAME#v}" ./build.sh
+        run: VERSION="$V" ./build.sh
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          V="${GITHUB_REF_NAME#v}"
-          gh release create "$GITHUB_REF_NAME" "dist/RegiePartage-$V-windows.zip" \
-            --title "Régie Partage $V" \
-            --notes "Mise à jour : quitter Régie Partage, dézipper et remplacer RegiePartage.exe. Réglages et connexion sont conservés."
+          if gh release view "v$V" >/dev/null 2>&1; then
+            gh release upload "v$V" "dist/RegiePartage-$V-windows.zip" --clobber
+          else
+            gh release create "v$V" "dist/RegiePartage-$V-windows.zip" \
+              --target "$GITHUB_SHA" \
+              --title "Régie Partage $V" \
+              --notes "Mise à jour : quitter Régie Partage, dézipper et remplacer RegiePartage.exe. Réglages et connexion sont conservés."
+          fi

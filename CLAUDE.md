@@ -11,7 +11,7 @@ Application développée par Frédéric Bourset pour une salle de spectacle : pa
 ## Livraison d'une version
 1. `VERSION=X.Y.Z ./build.sh` (vet, tests, exe Windows, zip dans dist/).
 2. Mettre à jour `VERSION` par défaut dans build.sh et l'historique ci-dessous.
-3. Commit, tag annoté `vX.Y.Z`, push du tag → `.github/workflows/release.yml` publie la Release.
+3. Commit et push sur main, puis publier : tag annoté `vX.Y.Z` poussé, ou GitHub > Actions > Release > Run workflow avec la version (crée le tag). Le proxy des sessions Claude refuse les pushs de tags : utiliser alors le bouton.
 
 ## Historique
 - v1.0.0 : régisseurs, projets, dossier SharePoint par projet, dépôt de documents, invitations lecture / lecture + dépôt, renvoi et retrait d'accès, guide administrateur.
